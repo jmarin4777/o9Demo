@@ -5,6 +5,12 @@ logger = logging.getLogger('o9_logger')
 from SalesForecast.Common import available_models, KNN, LINRRG, DECISIONTREE, RANDOMFOREST, EXTRATREES
 from SalesForecast.Models import get_model
 
+def get_days_until_xmas(date):
+    year = date.year
+    xmas = pd.to_datetime("12/25/" + str(year), format="%m/%d/%Y")
+    if date > xmas:
+        xmas += pd.DateOffset(years=1)
+    return (xmas - date).days
 
 def get_dataset(sales, features, stores):
     """
@@ -17,13 +23,13 @@ def get_dataset(sales, features, stores):
     dataset['Unemployment'] = dataset['Unemployment'].fillna(mean(dataset['Unemployment']))
     dataset[['Temperature','Fuel Price','MarkDown3']] = dataset[['Temperature','Fuel Price','MarkDown3']].fillna(0)
     dataset[['CPI', 'Unemployment']] = dataset[['CPI', 'Unemployment']].fillna(0)
-    date = pd.to_datetime(dataset["Time.[Day]"], format="%m/%d/%Y")
-    dataset['Year'] = date.dt.year
-    dataset['Day'] = date.dt.day
-    dataset['Month'] = date.dt.month
-    dataset["Days to Next Christmas"] = (
-                pd.to_datetime("12/31/" + dataset["Year"].astype(str), format="%m/%d/%Y") -
-                date).dt.days.astype(int)
+    dataset['Day'] = pd.to_datetime(dataset['Day'], format="%m/%d/%Y")
+    dataset['Year'] = dataset['Day'].dt.year
+    dataset['Month'] = dataset['Day'].dt.month
+    days_to_next_xmas = []
+    for index, row in dataset.iterrows():
+        days_to_next_xmas.append(get_days_until_xmas(row['Day']))
+    dataset['Days to Next Xmas'] = days_to_next_xmas
     dataset = dataset.drop(columns=['MarkDown1','MarkDown2', 'MarkDown4','MarkDown5'])
     return dataset
 
@@ -33,12 +39,12 @@ def create_x_y(dataset):
     rest of the columns are input features
     """
     X = dataset.loc[:, dataset.columns != 'Weekly Sales']
-    X = pd.get_dummies(X, columns=["Store.[Type]"])
+    X = pd.get_dummies(X, columns=['Type'])
     y = dataset[['Weekly Sales']]
     return (X, y)
 
 def drop_columns(X):
-    return X.drop(columns =['Time.[Day]'])
+    return X.drop(columns =['Day', 'Version Name'])
 
 def scale_x_y(X, y):
     from sklearn.model_selection import train_test_split
